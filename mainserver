@@ -1,0 +1,8 @@
+#!/bin/sh
+
+#cd /mesonet/scripts/snetPlex/bin
+
+export PATH=/mesonet/python-2.5/bin:$PATH
+
+kill -9 `cat twistd.pid `
+twistd -y mainserver.tac

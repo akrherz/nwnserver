@@ -1,0 +1,6 @@
+#!/bin/sh
+TZ=CST6CDT
+export TZ
+
+kill -9 `cat pythonhub.pid`
+twistd --logfile=./pythonhub.log --pidfile=./pythonhub.pid -y pythonhub.tac

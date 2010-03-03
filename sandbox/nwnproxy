@@ -1,0 +1,6 @@
+#!/bin/sh
+TZ=CST6CDT
+export TZ
+
+kill -9 `cat nwnproxy.pid`
+twistd --logfile=./nwnproxy.log --pidfile=./nwnproxy.pid -y nwnproxy.tac
