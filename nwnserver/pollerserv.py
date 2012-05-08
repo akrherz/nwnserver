@@ -56,7 +56,7 @@ class PollerDataFormatter:
     def __init__(self, realm, stationID):
         self.replacements = {}
         self.realm = realm
-        self.stationID = stationID
+        self.stationID = int(stationID)
         self.bogusLineCount = 0
         self.server = None
 
@@ -119,8 +119,13 @@ class PollerDataFormatter:
         # Prepend the line with the the dummy leading element and the stationID
         data.insert(0, self.stationID)
         data.insert(0, leadingElement)
-	#print data
-        return ' '.join([str(i) for i in data])
+        #return ' '.join([str(i) for i in data])
+        if len(data) != 14:
+            print "What happened here? |%s|" % (line,)
+            return ' '.join([str(i) for i in data])
+        return "%s %03i  %5s %8s %3s %5s %4s %4s %4s %4s %6s %7s %7s %7s" % (
+            data[0], data[1], data[2], data[3], data[4], data[5], data[6],
+            data[7], data[8], data[9], data[10], data[11], data[12], data[13])
 
 from nwnserver import filewatcher
 
@@ -163,7 +168,7 @@ class PollerRealm:
                 self.avatars[stationId].updateConfig(replacements)
                             
     def removePoller(self, stationID):
-        self.avatars.pop(stationID)
+        self.avatars.pop( str(stationID) )
         
     def requestAvatar(self, avatarId, mind, *interfaces):
         if IPollerDataFormatter in interfaces:

@@ -126,4 +126,3 @@ class ProxyHubServerFactory(hubserver.HubServerFactory):
             for client in self.clients:
                 if client.wantThisLine(line) == True:
                     client.sendLine(line)
-            self.archiver.sendLine(line)

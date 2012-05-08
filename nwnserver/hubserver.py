@@ -92,13 +92,12 @@ class HubServer(LineReceiver):
 class HubServerFactory(Factory):
     protocol = HubServer
     
-    def __init__(self, portal, avatarInterface=auth.IDummy, archiver=None):
+    def __init__(self, portal, avatarInterface=auth.IDummy):
         """
         @param portal: portal for cred authentication
         """
         self.portal = portal            
         self.clients = []
-        self.archiver = archiver
         self.avatarInterface = avatarInterface
 
     def __getstate__(self):

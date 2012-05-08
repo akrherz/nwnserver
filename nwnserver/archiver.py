@@ -1,7 +1,8 @@
 # I am the archiving component of the server megaplex :)
 
+from pyIEM import mesonet
 from twisted.internet.task import LoopingCall
-import re
+import re, math
 
 CURRENT_RE = re.compile(r"""
          [A-Z]\s+
@@ -56,6 +57,34 @@ MIN_RE = re.compile(r"""
          (?P<pRate>[0-9]+\.[0-9]+)"R
          """, 
          re.VERBOSE)
+
+def uv(sped, drct2):
+  dirr = drct2 * math.pi / 180.00
+  s = math.sin(dirr)
+  c = math.cos(dirr)
+  u = round(- sped * s, 2)
+  v = round(- sped * c, 2)
+  return u, v
+
+
+def dir(u,v):
+  if (v == 0):
+    v = 0.000000001
+  dd = math.atan(u / v)
+  ddir = (dd * 180.00) / math.pi
+
+  if (u > 0 and v > 0 ): # First Quad
+    ddir = 180 + ddir
+  elif (u > 0 and v < 0 ): # Second Quad
+    ddir = 360 + ddir
+  elif (u < 0 and v < 0 ): # Third Quad
+    ddir = ddir
+  elif (u < 0 and v > 0 ): # Fourth Quad
+    ddir = 180 + ddir
+
+  return int(math.fabs(ddir))
+
+
 class CurrentOb:
     """
 H 170  09:00 03/30/09 WSW 11MPH 000K 460F 041F 061% 29.74S 00.00"D 03.04"M 00.00
@@ -72,8 +101,7 @@ M 124  09:53 03/30/09 SE  07KTS 031K 460F 043F 062% 29.85F 00.00"D 03.48"M 00.00
 
 class MaxOb:
     """
-G 170   Max  03/30/09 WSW 17MPH 000K 460F 041F 075% 29.83" 00.00"D 03.04"M 00.00
-"R
+G 170   Max  03/30/09 WSW 17MPH 000K 460F 041F 075% 29.83" 00.00"D 03.04"M 00.00"R
     """
 
     def __init__(self, line):
@@ -122,9 +150,35 @@ class SiteData:
         if tokens[2] == "Max":
             self.max_ob = MaxOb(line) 
         elif tokens[2] == "Min":
-            self.min_obs = MinOb(line)
+            self.min_ob = MinOb(line)
         else:
             self.current_obs.append( CurrentOb(line) )
+
+    def average_winds(self):
+        """
+        Compute the wind speed and direction based on a series of 
+        observations
+        """
+        if len(self.current_obs) == 0:
+            return None, None
+        asped = []
+        ucmp = 0
+        vcmp = 0
+        for ob in self.current_obs:
+            if ob is None:
+                continue
+            asped.append( float(ob.sped) )
+            drct = mesonet.txt2drct[ ob.drctTxt ]
+            u, v = uv( float(ob.sped), drct)
+            ucmp += u
+            vcmp += v
+        if len(asped) == 0:
+            return None, None
+        uavg = ucmp / len(asped)
+        vavg = vcmp / len(asped)
+        drct = dir(uavg, vavg)
+        sped = sum(asped) / len(asped)
+        return sped, drct
 
 class Archiver:
     """
@@ -149,9 +203,8 @@ class Archiver:
         """
         print "Length of memory is ", len( self.memory.keys() )
         for id in self.memory.keys():
+            s, d = self.memory[id].average_winds()
             self.memory[id].current_obs = []
-            self.memory[id].max_obs = []
-            self.memory[id].min_obs = []
 
 
     def sendLine(self, line):
