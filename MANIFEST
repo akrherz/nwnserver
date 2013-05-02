@@ -1,5 +1,7 @@
+setup.cfg
 setup.py
 nwnserver/__init__.py
+nwnserver/archiver.py
 nwnserver/auth.py
 nwnserver/client.py
 nwnserver/common.py
