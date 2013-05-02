@@ -24,7 +24,6 @@ from twisted.cred import credentials, portal
 from zope.interface import Interface, implements
 from twisted.internet import reactor
 from twisted.python import log
-from twisted.internet.interfaces import ILoggingContext
 
 from nwnserver import common
 from nwnserver import filewatcher
@@ -181,14 +180,14 @@ class PollerRealm:
 
 
 class PollerServer(LineReceiver):
-    implements(ILoggingContext)
     # States for state machine
     LOGIN, PASS, TIME, AUTH, SUCCESS = range(5)
 
     def logPrefix(self):
         """ Override the logPrefix so that the twisted python logging
         includes the username connected """
-        return getattr(self, 'user', '-')
+        return "%s,%s" % (getattr(self, 'user', '-'), 
+                          getattr(self, 'ip', '-'))
 
     def loseConnection(self):
         self.transport.loseConnection()
@@ -198,8 +197,7 @@ class PollerServer(LineReceiver):
 
         self.__state = self.LOGIN
         self.transport.write(common.loginPrompt.upper())
-
-        log.msg("Connection made from: %s" % self.ip)
+        log.msg("New connection established")
 
     def connectionLost(self, reason):
         if self.__state == self.SUCCESS:
@@ -213,6 +211,9 @@ class PollerServer(LineReceiver):
             self.transport.write(common.passwordPrompt.upper())
             self.__state = self.PASS
             self.user = line
+            self.transport.logstr = '%s,%s,%s' % (self.user, 
+                                                  self.transport.sessionno,
+                                                  self.ip)
             
         elif self.__state == self.PASS:
             self.passwd = line
