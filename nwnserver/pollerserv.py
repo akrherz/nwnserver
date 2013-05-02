@@ -24,6 +24,7 @@ from twisted.cred import credentials, portal
 from zope.interface import Interface, implements
 from twisted.internet import reactor
 from twisted.python import log
+from twisted.internet.interfaces import ILoggingContext
 
 from nwnserver import common
 from nwnserver import filewatcher
@@ -79,7 +80,7 @@ class PollerDataFormatter:
     def formatLine(self, line):
         line = line.strip()
 
-        if line == '':
+        if line in ['', '...NO DATA...']:
             return ''
 
         data = line.split()
@@ -180,8 +181,14 @@ class PollerRealm:
 
 
 class PollerServer(LineReceiver):
+    implements(ILoggingContext)
     # States for state machine
     LOGIN, PASS, TIME, AUTH, SUCCESS = range(5)
+
+    def logPrefix(self):
+        """ Override the logPrefix so that the twisted python logging
+        includes the username connected """
+        return getattr(self, 'user', '-')
 
     def loseConnection(self):
         self.transport.loseConnection()
