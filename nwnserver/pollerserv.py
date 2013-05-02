@@ -26,7 +26,7 @@ from twisted.internet import reactor
 from twisted.python import log
 
 from nwnserver import common
-
+from nwnserver import filewatcher
 
 class IPollerDataFormatter(Interface):
 
@@ -67,7 +67,6 @@ class PollerDataFormatter:
         self.replacements = {}
         
         for r in replacements:
-            print r
             obType, column, value = r
             column = int(column)
 
@@ -75,7 +74,6 @@ class PollerDataFormatter:
 
     def logout(self):
         self.realm.removePoller(self.stationID)
-
         log.msg("Poller station %s disconnecting" % self.stationID)
 
     def formatLine(self, line):
@@ -108,12 +106,10 @@ class PollerDataFormatter:
 
                     return ''
 
-	#print obType, self.replacements
         if obType in self.replacements:
             for replacement in self.replacements[obType]:
                 # A change is going to be made, so indicate it with "R"
                 leadingElement = "R"
-		#print "replace %s" % (self.COLUMN,)
                 data[replacement[self.COLUMN]] = replacement[self.VALUE]
 
         # Prepend the line with the the dummy leading element and the stationID
@@ -121,13 +117,13 @@ class PollerDataFormatter:
         data.insert(0, leadingElement)
         #return ' '.join([str(i) for i in data])
         if len(data) != 14:
-            print "What happened here? |%s|" % (line,)
+            log.msg("Unparsable line received |%s|" % (line,))
             return ' '.join([str(i) for i in data])
         return "%s %03i  %5s %8s %3s %5s %4s %4s %4s %4s %6s %7s %7s %7s" % (
             data[0], data[1], data[2], data[3], data[4], data[5], data[6],
             data[7], data[8], data[9], data[10], data[11], data[12], data[13])
 
-from nwnserver import filewatcher
+
 
 class PollerRealm:
     #__implements__ = portal.IRealm
@@ -146,7 +142,7 @@ class PollerRealm:
         self.replacementConfig = {}
         
         for line in [line.strip() for line in configLines]:
-            print self.replacementConfig
+            log.msg(self.replacementConfig)
             if line != "" and line[0] != '#':
                 try:
                     stationID, obType, column, value = line.split(",")
@@ -168,7 +164,8 @@ class PollerRealm:
                 self.avatars[stationId].updateConfig(replacements)
                             
     def removePoller(self, stationID):
-        self.avatars.pop( str(stationID) )
+        """ remove a stationID from the avatars dict """
+        self.avatars.pop( str(stationID), None )
         
     def requestAvatar(self, avatarId, mind, *interfaces):
         if IPollerDataFormatter in interfaces:
@@ -282,5 +279,5 @@ class PollerServerFactory(Factory):
         """
         for client in self.clients:
             client.sendLine("...")
+        log.msg("Sent keepalive to %s clients" % (len(self.clients),))
         reactor.callLater(300, self.keepalive)
-        print "Sent keepalive to %s clients" % (len(self.clients),)

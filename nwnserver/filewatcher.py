@@ -45,17 +45,17 @@ class FileWatcher:
     def loadFilesInitially(self):
         self.timestamps = self.getTimeStamps()
         
-        for file in self.filenames:
-            self.processFile(file)
+        for myfile in self.filenames:
+            self.processFile(myfile)
             
     def getTimeStamps(self):
         timestamps = {}
         
-        for file in self.filenames:
+        for myfile in self.filenames:
             try:
-                timestamps[file] = os.stat(file)[stat.ST_MTIME]
+                timestamps[myfile] = os.stat(myfile)[stat.ST_MTIME]
             except OSError:
-                timestamps[file] = ''
+                timestamps[myfile] = ''
 
         return timestamps
 
@@ -63,10 +63,10 @@ class FileWatcher:
     def checkFiles(self):
         newtimes = self.getTimeStamps()
         
-        for file in self.filenames:
-            if newtimes[file] != self.timestamps[file]:
-                self.processFile(file)
-                self.timestamps[file] = newtimes[file]
+        for myfile in self.filenames:
+            if newtimes[myfile] != self.timestamps[myfile]:
+                self.processFile(myfile)
+                self.timestamps[myfile] = newtimes[myfile]
 
         reactor.callLater(self.delay, self.checkFiles)
 
@@ -77,9 +77,9 @@ class FileWatcher:
         """
         lines = open(filename).readlines()
 
-        print "%s has changed!" % filename
+        log.msg("%s has changed!" % filename)
         for line in lines:
-            print line,
+            log.msg(line)
 
 
 from pyIEM import nwnformat
@@ -94,32 +94,33 @@ class WX32FileWatcher(FileWatcher):
         self.pMonthDict = {}
         self.pDayDict = {}
         self.monthDict = {}
-        for id in self.ids:
-          self.pDayDict[id] = 0
-          self.pMonthDict[id] = 0
-          self.monthDict[id] = 0
+        for sid in self.ids:
+            self.pDayDict[sid] = 0
+            self.pMonthDict[sid] = 0
+            self.monthDict[sid] = 0
         self.readPMonth()
        
         if path[-1:] != os.sep:
             path += os.sep
         
-	self.filedict = dict([(path + self.filespec % id, id) for id in self.ids])    
-        FileWatcher.__init__(self,  [path + self.filespec % id for id in self.ids], delay)
+        self.filedict = dict([(path + self.filespec % sid, sid) for sid in self.ids])    
+        FileWatcher.__init__(self,  [path + self.filespec % sid for sid in self.ids], delay)
 
     def writePMonth(self):
         out = open("pmonth.log", 'w')
-        for id in self.ids:
-            out.write("%s,%s,%s\n" % (id, self.monthDict[id], self.pMonthDict[id]) )
+        for sid in self.ids:
+            out.write("%s,%s,%s\n" % (sid, self.monthDict[sid], 
+                                      self.pMonthDict[sid]) )
         out.close()
 
     def readPMonth(self):
         import re, string
         lines = open('pmonth.log', 'r').readlines()
         for line in lines:
-           tokens = re.split(",", line)
-           id = int(tokens[0])
-           self.monthDict[id] = int(string.strip(tokens[1]) )
-           self.pMonthDict[id] = float(tokens[2])
+            tokens = re.split(",", line)
+            sid = int(tokens[0])
+            self.monthDict[sid] = int(string.strip(tokens[1]) )
+            self.pMonthDict[sid] = float(tokens[2])
 
     def processFile(self, filename):
         id = self.filedict[filename]
@@ -212,7 +213,7 @@ class NWNFileWatcher(FileWatcher):
         if path[-1:] != os.sep:
             path += os.sep
         
-	self.filedict = dict([(path + self.filespec % id, id) for id in self.ids])    
+        self.filedict = dict([(path + self.filespec % id, id) for id in self.ids])    
         FileWatcher.__init__(self,  [path + self.filespec % id for id in self.ids], delay)
 
     def maintainConnections(self):
