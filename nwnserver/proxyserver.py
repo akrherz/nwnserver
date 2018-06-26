@@ -17,11 +17,11 @@
 
 """ NWN Hub Proxy server service """
 
-from twisted.cred import credentials, portal
-#from twisted.python.components import Interface
-from zope.interface import Interface, implements
-from twisted.internet import reactor
+from twisted.cred import portal
+from zope.interface import Interface, implementer
 from twisted.python import log
+from nwnserver import filewatcher
+from nwnserver import hubserver
 
 
 class IHubProxyClient(Interface):
@@ -34,18 +34,19 @@ class IHubProxyClient(Interface):
 
     def wantThisLine(self, line):
         """ Do I want this line """
-        
 
+
+@implementer(IHubProxyClient)
 class HubProxyClient:
-    implements(IHubProxyClient)
-    
+
     def __init__(self, realm, station):
         self.sites = []
         self.station = station
-        
+
     def updateConfig(self, sites):
+        print("self.sites being set to: %s" % (str(sites), ))
         self.sites = sites
-        
+
     def logout(self):
         self.realm.removeHubProxy(self.station)
 
@@ -60,8 +61,6 @@ class HubProxyClient:
             return False
 
 
-from nwnserver import filewatcher
-
 class HubProxyRealm:
     __implements__ = portal.IRealm
 
@@ -72,11 +71,10 @@ class HubProxyRealm:
         self.fileWatcher = filewatcher.ConfigFileWatcher([siteListPath],
                                                          self, reloadInterval)
 
-
     def updateConfig(self, configLines):
         # Recreate the config from scratch
         self.siteListConfig = {}
-        
+
         for line in [line.strip() for line in configLines]:
             if line != "" and line[0] != '#':
                 data = line.split(",")
@@ -90,19 +88,22 @@ class HubProxyRealm:
         self.updateStationConfigs()
 
     def updateStationConfigs(self):
-        for station, sites in self.siteListConfig.iteritems():
+        for station in self.siteListConfig:
+            sites = self.siteListConfig[station]
             if station in self.avatars:
                 self.avatars[station].updateConfig(sites)
 
     def removeHubProxy(self, station):
         self.avatars.pop(station)
-        
+
     def requestAvatar(self, avatarId, mind, *interfaces):
+        print(interfaces)
         if IHubProxyClient in interfaces:
-            station = avatarId[:4].upper()
-            
+            station = avatarId[:4].upper().decode('utf-8')
+
             proxyClient = HubProxyClient(self, station)
             self.avatars[station] = proxyClient
+            print("self.avatars is now: %s" % (repr(self.avatars), ))
 
             self.updateStationConfigs()
 
@@ -110,19 +111,17 @@ class HubProxyRealm:
             return IHubProxyClient, proxyClient, proxyClient.logout
 
 
-
-from nwnserver import hubserver
-
 class ProxyHubServer(hubserver.HubServer):
     def wantThisLine(self, line):
         return self.avatar.wantThisLine(line)
+
 
 class ProxyHubServerFactory(hubserver.HubServerFactory):
     protocol = ProxyHubServer
 
     def sendToAllClients(self, line):
-        if (line != "" and line is not None):
+        if line is not None and line != "":
             line = line.strip()
             for client in self.clients:
-                if client.wantThisLine(line) == True:
-                    client.sendLine(line)
+                if client.wantThisLine(line):
+                    client.sendLine(line.encode('utf-8'))

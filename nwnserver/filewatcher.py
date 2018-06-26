@@ -19,11 +19,17 @@
 Neighborhood Weather Net Hub local file data source and monitor
 """
 
-import os, sys
-import stat, traceback
+import re
+import os
+import sys
+import stat
+import traceback
+import configparser
 
 from twisted.internet import reactor
 from twisted.python import log
+from pyiem import nwnformat
+
 
 class FileWatcher:
     """ I am a generic class that watches a list of files and performs a given
@@ -82,12 +88,10 @@ class FileWatcher:
             log.msg(line)
 
 
-from pyIEM import nwnformat
-import ConfigParser
 
 class WX32FileWatcher(FileWatcher):
     def __init__(self, path, filespec, ids,
-                 serverfactory, delay = 60):
+                 serverfactory, delay=60):
         self.ids = ids
         self.serverfactory = serverfactory
         self.filespec = filespec
@@ -109,91 +113,86 @@ class WX32FileWatcher(FileWatcher):
     def writePMonth(self):
         out = open("pmonth.log", 'w')
         for sid in self.ids:
-            out.write("%s,%s,%s\n" % (sid, self.monthDict[sid], 
-                                      self.pMonthDict[sid]) )
+            out.write("%s,%s,%s\n" % (sid, self.monthDict[sid],
+                                      self.pMonthDict[sid]))
         out.close()
 
     def readPMonth(self):
-        import re, string
         lines = open('pmonth.log', 'r').readlines()
         for line in lines:
             tokens = re.split(",", line)
             sid = int(tokens[0])
-            self.monthDict[sid] = int(string.strip(tokens[1]) )
+            self.monthDict[sid] = int(tokens[1].strip())
             self.pMonthDict[sid] = float(tokens[2])
 
     def processFile(self, filename):
         id = self.filedict[filename]
         n = nwnformat.nwnformat()
-        cf = ConfigParser.ConfigParser()
-        
+        cf = configparser.ConfigParser()
+
         try:
-          cf.read(filename)
-        except:
-          traceback.print_exc(file=sys.stdout)
-          pass
+            cf.read(filename)
+        except Exception as exp:
+            print(exp)
+            return
 
-        if (len(cf.sections()) != 3):
-          log.msg("%s %s %d" % (id, 'Short read', len(cf.sections())))
-          return
+        if len(cf.sections()) != 3:
+            log.msg("%s %s %d" % (id, 'Short read', len(cf.sections())))
+            return
         try:
-          n.sid = id
-          n.setTS( cf.get("Current Values", "Time") )
-          n.parseWind( cf.get("Current Values", "Wind") )
-          n.setRad( cf.get("Current Values", "Solar") )
-          p = cf.get("Current Values", "Temperature")
-          if (p != "Missing"):
-            n.tmpf = int(float(p))
-          p = cf.get("Current Values", "Humidity")
-          if (p != "Missing"):
-            n.humid = int(float(p))
-          p = cf.get("Current Values", "Pressure")
-          if (p != "Missing"):
-            n.pres = float(p)
-          n.presTend = "R"
+            n.sid = id
+            n.setTS( cf.get("Current Values", "Time") )
+            n.parseWind( cf.get("Current Values", "Wind") )
+            n.setRad( cf.get("Current Values", "Solar") )
+            p = cf.get("Current Values", "Temperature")
+            if (p != "Missing"):
+                n.tmpf = int(float(p))
+            p = cf.get("Current Values", "Humidity")
+            if (p != "Missing"):
+                n.humid = int(float(p))
+            p = cf.get("Current Values", "Pressure")
+            if (p != "Missing"):
+                n.pres = float(p)
+            n.presTend = "R"
 
-          """ Ugly precip logic, have to do something tho.... 
+            """ Ugly precip logic, have to do something tho.... """
+            # Get value from the datafile
+            n.parsePDay( cf.get("Current Values", "RainForDay") )
+            pDay = n.pDay
+            lastPDay = self.pDayDict[id]
+            yyyymm = int( n.ts.strftime("%Y%m") )
+            lastYYYYMM = self.monthDict[id]
+            if (lastYYYYMM < yyyymm):   # Reset month dict to zero
+                self.pMonthDict[id] = 0   #
+                self.monthDict[id] = yyyymm
+                self.writePMonth()
+            # pDay is smaller, then we should add to month dict
+            if (pDay < lastPDay):
+                self.pMonthDict[id] += lastPDay
+                self.writePMonth()
 
-          """
-          # Get value from the datafile
-          n.parsePDay( cf.get("Current Values", "RainForDay") )
-          pDay = n.pDay
-          lastPDay = self.pDayDict[id]
-          yyyymm = int( n.ts.strftime("%Y%m") )
-          lastYYYYMM = self.monthDict[id]
-          if (lastYYYYMM < yyyymm):   # Reset month dict to zero
-            self.pMonthDict[id] = 0   #
-            self.monthDict[id] = yyyymm
-            self.writePMonth()
-          # pDay is smaller, then we should add to month dict
-          if (pDay < lastPDay):
-            self.pMonthDict[id] += lastPDay
-            self.writePMonth()
+            pMonth = self.pMonthDict[id] + pDay
+            self.pDayDict[id] = pDay
 
-          pMonth = self.pMonthDict[id] + pDay
-          self.pDayDict[id] = pDay
+            #n.parsePDay( cf.get("Current Values", "RainForDay") )
+            n.setPMonth(pMonth)
 
-          #n.parsePDay( cf.get("Current Values", "RainForDay") )
-          n.setPMonth(pMonth)
+            p = cf.get("High Values", "HighTemperature")
+            if (p != "Missing"):
+                n.xtmpf = int(float(p))
+            p = cf.get("Low Values", "LowTemperature")
+            if (p != "Missing"):
+                n.ntmpf = int(float(p))
+            p = cf.get("High Values", "HighWind")
+            if (p != "Missing"):
+                n.xsped = int(float(p))
+            n.sanityCheck()
+        except Exception as exp:
+            n.error = 1000
+            print(exp)
 
-
-          p = cf.get("High Values", "HighTemperature")
-          if (p != "Missing"):
-            n.xtmpf = int(float(p))
-          p = cf.get("Low Values", "LowTemperature")
-          if (p != "Missing"):
-            n.ntmpf = int(float(p))
-          p = cf.get("High Values", "HighWind")
-          if (p != "Missing"):
-            n.xsped = int(float(p))
-          n.sanityCheck()
-        except:
-          n.error = 1000
-          traceback.print_exc(file=sys.stdout)
-          pass
-
-        if (n.error > 0):
-            print "ERROR %s IS %s" % (id, n.error)
+        if n.error not in [0, 101]:
+            print("ERROR %s IS %s" % (id, n.error))
         if n.error == 0:
             self.sendData(n.currentLine())
             reactor.callLater(1, self.sendData, n.maxLine())
@@ -205,7 +204,7 @@ class WX32FileWatcher(FileWatcher):
 
 class NWNFileWatcher(FileWatcher):
     def __init__(self, path, filespec, ids,
-                 serverfactory, delay = 60):
+                 serverfactory, delay=60):
         self.ids = ids
         self.serverfactory = serverfactory
         self.filespec = filespec
@@ -221,14 +220,14 @@ class NWNFileWatcher(FileWatcher):
         reactor.callLater(30, self.maintainConnections)
 
     def processFile(self, filename):
-	id = self.filedict[filename]
+        id = self.filedict[filename]
         lines = None
         try:
-          lines = open(filename, 'r').readlines()
+            lines = open(filename, 'r').readlines()
         except:
-          pass
-        if (lines != None and len(lines) == 3):
-          reactor.callLater(0.2, self.sendFileData, lines)
+            pass
+        if lines is not None and len(lines) == 3:
+            reactor.callLater(0.2, self.sendFileData, lines)
 
     def sendData(self, str):
         self.serverfactory.sendToAllClients(str)

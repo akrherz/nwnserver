@@ -1,8 +1,9 @@
 # I am the archiving component of the server megaplex :)
 
-from pyIEM import mesonet
+from pyiem import reference
 from twisted.internet.task import LoopingCall
-import re, math
+import re
+import math
 
 CURRENT_RE = re.compile(r"""
          [A-Z]\s+
@@ -168,7 +169,7 @@ class SiteData:
             if ob is None:
                 continue
             asped.append( float(ob.sped) )
-            drct = mesonet.txt2drct[ ob.drctTxt ]
+            drct = reference.txt2drct.get(ob.drctTxt, 0)
             u, v = uv( float(ob.sped), drct)
             ucmp += u
             vcmp += v

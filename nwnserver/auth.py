@@ -19,19 +19,18 @@
 
 from twisted.cred import credentials, portal
 #from twisted.python.components import Interface
-from zope.interface import Interface, implements
+from zope.interface import Interface, implementer
 
 class IDummy(Interface):
     """I am a dummy interface for the cred Mind to attach to."""
     pass
 
 
+@implementer(portal.IRealm)
 class NWNRealm:
     """I am a dummy realm for cred.  All I need to do is know whether or
     not the user authenticated and continue to use the protocol object."""
     #__implements__ = (portal.IRealm,)
-    implements(portal.IRealm)
-
+    
     def requestAvatar(self, avatarId, mind, *interfaces):
         pass
-

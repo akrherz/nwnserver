@@ -20,10 +20,9 @@
 from twisted.internet.protocol import Factory
 from twisted.protocols.basic import LineReceiver
 from twisted.cred import credentials, portal
-#from twisted.python.components import Interface
-from zope.interface import Interface, implements
 from twisted.internet import reactor
 from twisted.python import log
+from zope.interface import Interface, implementer
 
 from nwnserver import common
 from nwnserver import filewatcher
@@ -38,11 +37,10 @@ class IPollerDataFormatter(Interface):
 
     def formatLine(self, line):
         """ Format the line """
-        
 
+
+@implementer(IPollerDataFormatter)
 class PollerDataFormatter:
-    #__implements__ = (IPollerDataFormatter, )
-    implements(IPollerDataFormatter)
 
     CURRENT, MIN, MAX = range(3)
     obTypes = ['C', 'N', 'X']
@@ -52,7 +50,7 @@ class PollerDataFormatter:
     COLUMN, VALUE = range(2)
 
     BOGUS_LINE_LIMIT = 10
-        
+
     def __init__(self, realm, stationID):
         self.replacements = {}
         self.realm = realm
@@ -62,10 +60,10 @@ class PollerDataFormatter:
 
     def setPollerServer(self, server):
         self.server = server
-        
+
     def updateConfig(self, replacements):
         self.replacements = {}
-        
+
         for r in replacements:
             obType, column, value = r
             column = int(column)
@@ -83,7 +81,7 @@ class PollerDataFormatter:
             return ''
 
         data = line.split()
-        
+
         leadingElement = "A"
 
         obType = data[self.OBTYPE]
@@ -101,8 +99,9 @@ class PollerDataFormatter:
                     try:
                         self.server.loseConnection()
                     except AttributeError:
-                        log.msg("Station %s doesn't have reference to \
-                                 its protocol instance.  Can't disconnect" % self.stationID)
+                        log.msg(("Station %s doesn't have reference to "
+                                 "its protocol instance.  Can't disconnect"
+                                  ) % (self.stationID, ))
 
                     return ''
 
@@ -124,11 +123,10 @@ class PollerDataFormatter:
             data[7], data[8], data[9], data[10], data[11], data[12], data[13])
 
 
-
+@implementer(portal.IRealm)
 class PollerRealm:
     #__implements__ = portal.IRealm
-    implements(portal.IRealm)
-
+    
     def __init__(self, replacementConfigFilePath, reloadInterval=60):
         self.replacementConfig = {}
         self.avatars = {}
@@ -159,14 +157,15 @@ class PollerRealm:
         self.updateStationConfigs()
 
     def updateStationConfigs(self):
-        for stationId, replacements in self.replacementConfig.iteritems():
+        for stationId in self.replacementConfig:
             if stationId in self.avatars:
+                replacements = self.replacementConfig[stationId]
                 self.avatars[stationId].updateConfig(replacements)
-                            
+
     def removePoller(self, stationID):
         """ remove a stationID from the avatars dict """
-        self.avatars.pop( str(stationID), None )
-        
+        self.avatars.pop(str(stationID), None)
+
     def requestAvatar(self, avatarId, mind, *interfaces):
         if IPollerDataFormatter in interfaces:
             stationID = avatarId[4:]
@@ -175,73 +174,78 @@ class PollerRealm:
             self.updateStationConfigs()
 
             log.msg("Poller station %s connected" % stationID)
-            
+
             return IPollerDataFormatter, poller, poller.logout
 
 
 class PollerServer(LineReceiver):
+    """Our server that takes lines from the client"""
     # States for state machine
     LOGIN, PASS, TIME, AUTH, SUCCESS = range(5)
 
     def logPrefix(self):
         """ Override the logPrefix so that the twisted python logging
         includes the username connected """
-        return "%s,%s" % (getattr(self, 'user', '-'), 
+        return "%s,%s" % (getattr(self, 'user', '-'),
                           getattr(self, 'ip', '-'))
 
     def loseConnection(self):
         self.transport.loseConnection()
-        
+
     def connectionMade(self):
         self.ip = self.transport.getPeer().host
-
         self.__state = self.LOGIN
-        self.transport.write(common.loginPrompt.upper())
+        self.transport.write(common.loginPrompt.upper().encode('utf-8'))
         log.msg("New connection established")
 
     def connectionLost(self, reason):
         if self.__state == self.SUCCESS:
-            self.factory.clients.remove(self)
+            if self in self.factory.clients:
+                self.factory.clients.remove(self)
             self.avatar.logout()
 
         log.msg("Connection lost from: %s because of: %s" % (self.ip, reason))
-        
+
     def lineReceived(self, line):
+        """We got a line, which is bytes"""
         if self.__state == self.LOGIN:
-            self.transport.write(common.passwordPrompt.upper())
+            self.transport.write(common.passwordPrompt.upper().encode('utf-8'))
             self.__state = self.PASS
             self.user = line
-            self.transport.logstr = '%s,%s,%s' % (self.user, 
+            self.transport.logstr = '%s,%s,%s' % (self.user,
                                                   self.transport.sessionno,
                                                   self.ip)
-            
+
         elif self.__state == self.PASS:
             self.passwd = line
             self.__state = self.TIME
 
         elif self.__state == self.TIME:
-            # We don't care about the time info sent right now, so line is ignored here
+            # We don't care about the time info sent right now
+            # so line is ignored here
             self.__state = self.AUTH
 
-            d = self.factory.portal.login(credentials.UsernamePassword(self.user, self.passwd),
-                                          None, IPollerDataFormatter)
+            d = self.factory.portal.login(
+                credentials.UsernamePassword(self.user, self.passwd),
+                None, IPollerDataFormatter)
             d.addCallback(self._cbAuth)
             d.addErrback(self._ebAuth)
 
         elif self.__state == self.SUCCESS:
-            #print line
-            self.factory.lineReceived(self.avatar.formatLine(line))
+            self.factory.lineReceived(
+                self.avatar.formatLine(line.decode('utf-8')))
 
-    def _cbAuth(self, (interface, avatar, logout)):
+    def _cbAuth(self, args):
         """Called when user is successfully authenticated."""
-        assert interface is IPollerDataFormatter
 
+        (interface, avatar, logout) = args
+        assert interface is IPollerDataFormatter
         self.avatar = avatar
         self.logout = logout
-        
+
         self.__state = self.SUCCESS
-        self.sendLine('')
-        self.sendLine(common.successMessage)
+        self.sendLine(b'')
+        self.sendLine(common.successMessage.encode('utf-8'))
 
         self.factory.clients.append(self)
         self.avatar.setPollerServer(self)
@@ -253,7 +257,6 @@ class PollerServer(LineReceiver):
         self.loseConnection()
 
         log.msg("Client failed authentication from: %s" % self.ip)
-
 
 
 class PollerServerFactory(Factory):

@@ -24,7 +24,7 @@ from twisted.python import log
 from nwnserver import common
 
 class HubClientProtocol(basic.LineReceiver, policies.TimeoutMixin):
-    delimiter = "\r\n"
+    delimiter = b"\r\n"
     # If haven't received data for a minute, reconnect
     timeOut = 60
     
@@ -53,36 +53,37 @@ class HubClientProtocol(basic.LineReceiver, policies.TimeoutMixin):
         
     def rawDataReceived(self, data):
         self.resetTimeout()
-        self.buffer += data
+        self.buffer += data.decode('utf-8', 'ignore')
         promptEndingLocation = self.buffer.find(common.promptEnding)
         successMsgLocation = self.buffer.find(common.successMessage)
         
         if promptEndingLocation > 0:
             if self.buffer[promptEndingLocation - common.loginPromptLen + common.promptEndingLen:
                            promptEndingLocation + common.promptEndingLen] == common.loginPrompt:
-                self.transport.write(self.factory.username + self.delimiter)
+                self.transport.write(self.factory.username.encode('utf-8') + self.delimiter)
                 self.buffer = self.buffer[promptEndingLocation + common.promptEndingLen:]
                 
             elif self.buffer[promptEndingLocation - common.passwordPromptLen + common.promptEndingLen:
                              promptEndingLocation + common.promptEndingLen] == common.passwordPrompt:
-                self.transport.write(self.factory.password + self.delimiter)
+                self.transport.write(self.factory.password.encode('utf-8') + self.delimiter)
                 self.buffer = self.buffer[promptEndingLocation + common.promptEndingLen:]
 
         elif successMsgLocation >= 0:
-             self.setLineMode(self.buffer[successMsgLocation + common.successMessageLen:])
+             self.setLineMode((self.buffer[successMsgLocation + common.successMessageLen:]).encode('utf-8'))
              self.buffer = ""
             
     def lineReceived(self, line):
         self.resetTimeout()
         # Only called after client authenticates
-        self.factory.processData(line)
+        # send back str instead of bytes
+        self.factory.processData(line.decode('utf-8', 'ignore'))
 
 
 class HubClientProtocolBaseFactory(protocol.ReconnectingClientFactory):
     protocol = HubClientProtocol
     maxDelay = 60
 
-    def __init__(self, username, password, autoReconnect = 1):
+    def __init__(self, username, password, autoReconnect=1):
         self.username = username
         self.password = password
         self.continueTrying = autoReconnect
@@ -94,7 +95,7 @@ class HubClientProtocolBaseFactory(protocol.ReconnectingClientFactory):
         data = data.strip()
 
         if data != "":
-            print data
+            print(data)
 
 class HubClientProtocolFactory(HubClientProtocolBaseFactory):
     """I create clients that hand their received data off to a hub object"""
