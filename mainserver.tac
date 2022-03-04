@@ -53,11 +53,10 @@ hubServer.setServiceParent(serviceCollection)
 
 #______________________________________________________________________
 # 2a.  Connect to Baron to get their data
-remoteServerIP = 'nwnhub.baronservices.com'
-#remoteServerIP = '74.51.117.181'
-remoteServerPort = 14996
-remoteServerUser = 'darryl'
-remoteServerPass = 'darryl'
+remoteServerIP = '0.0.0.0'
+remoteServerPort = 0
+remoteServerUser = ''
+remoteServerPass = ''
 
 hubClientFactory = hubclient.HubClientProtocolFactory(remoteServerUser,
                                                       remoteServerPass,
